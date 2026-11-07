@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Laboratorio Multimedia A-Frame</title>
+
+<script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #111;
+    color: white;
+}
+
+#panel {
+    position: fixed;
+    z-index: 100;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    padding: 12px;
+    background: rgba(0,0,0,.88);
+    border-radius: 12px;
+}
+
+button, input {
+    padding: 10px;
+    margin: 4px;
+    border-radius: 6px;
+    max-width: 100%;
+}
+
+button {
+    background: #168B45;
+    color: white;
+    border: 0;
+}
+
+#estado {
+    color: #55DDFF;
+    font-size: 13px;
+}
+
+a-scene {
+    height: 100vh;
+    width: 100vw;
+}
+</style>
+</head>
+
+<body>
+
+<div id="panel">
+
+<strong>LABORATORIO MULTIMEDIA 3D</strong>
+
+<br><br>
+
+<input type="file" id="archivo"
+accept="video/mp4,video/webm,video/ogg">
+
+<br>
+
+<input type="text" id="urlVideo"
+placeholder="URL directa MP4"
+style="width:85%">
+
+<button id="cargarURL">CARGAR URL</button>
+
+<br>
+
+<button id="play">▶ PLAY</button>
+<button id="pause">⏸ PAUSE</button>
+
+<button id="sensor">🧭 SENSOR</button>
+
+<p id="estado">Inicializando...</p>
+
+</div>
+
+<video
+    id="video"
+    src="videos/demo.mp4"
+    playsinline
+    webkit-playsinline
+    preload="metadata"
+    loop
+    style="display:none">
+</video>
+
+<a-scene background="color: #101820">
+
+    <!-- PANTALLA -->
+    <a-plane
+        id="pantalla"
+        position="0 1.7 -4"
+        width="4"
+        height="2.25"
+        material="
+            shader: flat;
+            src: #video;
+            side: double">
+    </a-plane>
+
+    <!-- MARCO -->
+    <a-box
+        position="0 1.7 -4.06"
+        width="4.15"
+        height="2.4"
+        depth="0.08"
+        color="#222">
+    </a-box>
+
+    <a-light type="ambient" intensity="1"></a-light>
+
+    <!-- CÁMARA -->
+    <a-camera
+        id="camara"
+        position="0 1.6 0"
+        look-controls="
+            enabled: true;
+            magicWindowTrackingEnabled: false;
+            touchEnabled: true">
+    </a-camera>
+
+</a-scene>
+
+<script>
+
+const video = document.querySelector("#video");
+const estado = document.querySelector("#estado");
+const camara = document.querySelector("#camara");
+
+let urlTemporal = null;
+
+// =================================
+// 1. VIDEO DESDE CARPETA
+// =================================
+
+video.addEventListener("loadeddata", () => {
+
+    estado.textContent = "Video cargado correctamente";
+
+});
+
+video.addEventListener("error", () => {
+
+    estado.textContent =
+        "Error de video: revisar archivo, URL o formato";
+
+});
+
+// =================================
+// 2. VIDEO DESDE DISPOSITIVO
+// =================================
+
+document.querySelector("#archivo")
+.addEventListener("change", function(e) {
+
+    const archivo = e.target.files[0];
+
+    if (!archivo) return;
+
+    if (urlTemporal) {
+        URL.revokeObjectURL(urlTemporal);
+    }
+
+    video.pause();
+
+    video.removeAttribute("crossorigin");
+
+    urlTemporal = URL.createObjectURL(archivo);
+
+    video.src = urlTemporal;
+
+    video.load();
+
+    estado.textContent = "Archivo: " + archivo.name;
+
+});
+
+// =================================
+// 3. VIDEO DESDE INTERNET
+// =================================
+
+document.querySelector("#cargarURL")
+.addEventListener("click", function() {
+
+    const url = document.querySelector("#urlVideo")
+        .value.trim();
+
+    if (!url) return;
+
+    if (urlTemporal) {
+        URL.revokeObjectURL(urlTemporal);
+        urlTemporal = null;
+    }
+
+    video.pause();
+
+    video.crossOrigin = "anonymous";
+
+    video.src = url;
+
+    video.load();
+
+    estado.textContent = "Cargando video externo...";
+
+});
+
+// =================================
+// 4. REPRODUCIR
+// =================================
+
+document.querySelector("#play")
+.addEventListener("click", async function() {
+
+    try {
+
+        await video.play();
+
+        estado.textContent = "Reproduciendo";
+
+    } catch(error) {
+
+        estado.textContent =
+            "Error: " + error.message;
+
+    }
+
+});
+
+// =================================
+// 5. PAUSAR
+// =================================
+
+document.querySelector("#pause")
+.addEventListener("click", function() {
+
+    video.pause();
+
+    estado.textContent = "Video pausado";
+
+});
+
+// =================================
+// 6. DETECTAR GIROSCOPIO
+// =================================
+
+let sensorDetectado = false;
+let temporizador = null;
+
+function recibirOrientacion(evento) {
+
+    if (
+        evento.alpha === null &&
+        evento.beta === null &&
+        evento.gamma === null
+    ) return;
+
+    sensorDetectado = true;
+
+    clearTimeout(temporizador);
+
+    camara.setAttribute(
+        "look-controls",
+        "magicWindowTrackingEnabled",
+        true
+    );
+
+    estado.textContent =
+        "Orientación detectada: SENSOR ACTIVO";
+
+}
+
+document.querySelector("#sensor")
+.addEventListener("click", async function() {
+
+    sensorDetectado = false;
+
+    estado.textContent = "Solicitando sensor...";
+
+    // Solicitar permiso en Safari iOS
+
+    if (
+        typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission ===
+        "function"
+    ) {
+
+        try {
+
+            const permiso =
+                await DeviceOrientationEvent.requestPermission();
+
+            if (permiso !== "granted") {
+
+                estado.textContent = "Permiso denegado";
+
+                return;
+            }
+
+        } catch(error) {
+
+            estado.textContent = error.message;
+
+            return;
+        }
+
+    }
+
+    if (typeof DeviceOrientationEvent === "undefined") {
+
+        estado.textContent =
+            "API de orientación no disponible";
+
+        return;
+    }
+
+    window.addEventListener(
+        "deviceorientation",
+        recibirOrientacion
+    );
+
+    temporizador = setTimeout(function() {
+
+        if (!sensorDetectado) {
+
+            camara.setAttribute(
+                "look-controls",
+                "magicWindowTrackingEnabled",
+                false
+            );
+
+            estado.textContent =
+                "Sin datos de orientación. Usa el tacto.";
+
+        }
+
+    }, 3000);
+
+});
+
+</script>
+
+</body>
+</html>
